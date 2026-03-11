@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realistic Revolving Door Trigger</title>
+    <title>Realistic Revolving Door Trigger (ArobaView IF)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
@@ -217,11 +217,6 @@
     </div>
 
     <script>
-        /**
-         * 【重要】ここにGASでデプロイしたウェブアプリのURLを貼り付けてください
-         */
-        const GAS_WEB_APP_URL = "http://order:password@172.24.252.101/es/OrderModule/service/order.php?id=ORDER0012";
-
         const person = document.getElementById('person');
         const stage = document.getElementById('stage');
         const door = document.getElementById('revolving-door');
@@ -277,7 +272,6 @@
 
             const distance = Math.sqrt(Math.pow(pCenterX - dCenterX, 2) + Math.pow(pCenterY - dCenterY, 2));
 
-            // 判定距離の調整（ドアの半径に近い距離でトリガー）
             if (distance < 110) triggerStuck();
         }
 
@@ -286,20 +280,29 @@
             isDragging = false;
             door.classList.add('stuck');
             statusMsg.classList.add('alarm-active');
-            sendHttpRequest();
+            sendArobaOrder();
         }
 
-        async function sendHttpRequest() {
-            if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE") {
-                console.warn("GAS URL is not defined.");
-                return;
-            }
+        /**
+         * アロバビュー セキュリティ連動IFへ リクエスト送信
+         */
+        function sendArobaOrder() {
+            // 認証情報なしのシンプルなURL
+            const baseUrl = "http://172.24.252.101/es/OrderModule/service/order.php?id=ORDER0012";
 
-            const url = `${GAS_WEB_APP_URL}?status=stuck&ts=${Date.now()}`;
+            // ブラウザのキャッシュ（過去の記憶）が効いて通信が省略されないよう、
+            // URLの末尾に実行した瞬間の時間をくっつけます（アロバビュー側はこれを無視します）
+            const urlWithCacheBuster = baseUrl + "&_t=" + Date.now();
+
             try {
-                await fetch(url, { method: 'GET', mode: 'cors' });
+                // 【最終手段】Image（画像）読み込みの仕組みを利用したGETリクエスト送信
+                // fetchやXHRのような厳しいセキュリティ制限を受けずに、指定URLへ確実にリクエストが飛びます。
+                const triggerImg = new Image();
+                triggerImg.src = urlWithCacheBuster;
+
+                console.log("Order Sent via Image Ping: " + urlWithCacheBuster);
             } catch (err) {
-                console.error("Fetch error:", err);
+                console.error("Communication error:", err);
             }
         }
 
