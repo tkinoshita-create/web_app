@@ -165,12 +165,10 @@
 
     <div id="stage" class="relative w-full h-screen flex items-center justify-center">
 
-        <!-- 警告通知 -->
         <div id="status-msg" class="alarm-toast flex items-center gap-3">
             <span class="animate-pulse">⚠️</span> 警告：回転扉が止まりました！
         </div>
 
-        <!-- 回転扉ユニット -->
         <div class="revolving-door-container shadow-2xl">
             <div id="revolving-door" class="revolving-door rotating">
                 <div class="door-blade"></div>
@@ -179,7 +177,6 @@
             </div>
         </div>
 
-        <!-- 人のアイコン -->
         <div id="person" class="person-icon absolute" style="top: 15%; left: 20%;">
             <svg class="person-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
                 <defs>
@@ -188,19 +185,14 @@
                         <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
                     </linearGradient>
                 </defs>
-                <!-- 影 -->
                 <ellipse cx="32" cy="58" rx="15" ry="4" fill="rgba(0,0,0,0.2)" />
-                <!-- 頭 -->
                 <circle cx="32" cy="12" r="8" fill="url(#personGrad)" />
-                <!-- 体と手足 -->
                 <path d="M32 20 c-6 0-10 2-10 8 v12 h4 v14 h12 v-14 h4 v-12 c0-6-4-8-10-8 z" fill="url(#personGrad)" />
-                <!-- 腕のライン -->
                 <path d="M22 28 q-5 10 0 20" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" />
                 <path d="M42 28 q5 10 0 20" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" />
             </svg>
         </div>
 
-        <!-- 復旧操作パネル -->
         <div class="absolute bottom-12">
             <button id="reset-btn"
                 class="bg-slate-900 hover:bg-black text-white px-16 py-6 rounded-3xl text-2xl font-black transition-all shadow-2xl active:scale-95 flex items-center gap-4 border-b-4 border-slate-700">
@@ -287,23 +279,33 @@
          * アロバビュー セキュリティ連動IFへ リクエスト送信
          */
         function sendArobaOrder() {
-            // 認証情報なしのシンプルなURL
+            // URLから認証情報を外し、純粋なエンドポイントのみにする
             const baseUrl = "http://172.24.252.101/es/OrderModule/service/order.php?id=ORDER0012";
-
-            // ブラウザのキャッシュ（過去の記憶）が効いて通信が省略されないよう、
-            // URLの末尾に実行した瞬間の時間をくっつけます（アロバビュー側はこれを無視します）
             const urlWithCacheBuster = baseUrl + "&_t=" + Date.now();
 
-            try {
-                // 【最終手段】Image（画像）読み込みの仕組みを利用したGETリクエスト送信
-                // fetchやXHRのような厳しいセキュリティ制限を受けずに、指定URLへ確実にリクエストが飛びます。
-                const triggerImg = new Image();
-                triggerImg.src = urlWithCacheBuster;
+            // 成功が確認できたアカウント情報
+            const username = "order";
+            const password = "password";
 
-                console.log("Order Sent via Image Ping: " + urlWithCacheBuster);
-            } catch (err) {
-                console.error("Communication error:", err);
-            }
+            // Basic認証用に「ユーザー名:パスワード」をBase64でエンコード
+            const base64Credentials = btoa(username + ":" + password);
+
+            console.log("Order Sending... : " + urlWithCacheBuster);
+
+            // fetchを使って、ヘッダーに直接認証情報を埋め込んで送る
+            fetch(urlWithCacheBuster, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Basic ' + base64Credentials
+                }
+            })
+                .then(response => {
+                    console.log("アロバビューへのリクエスト送信完了！ステータス:", response.status);
+                })
+                .catch(err => {
+                    // ※もしここでCORSエラーが出る場合は、ブラウザの開発者ツール(F12)のConsoleに赤字で出ます
+                    console.error("通信エラー（ネットワークまたはCORS制限の可能性）:", err);
+                });
         }
 
         resetBtn.addEventListener('click', () => {
