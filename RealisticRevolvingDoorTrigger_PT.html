@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revolving Door HTTP Trigger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .revolving-door {
+            width: 220px;
+            height: 220px;
+            position: relative;
+            border-radius: 50%;
+            border: 6px solid #4b5563;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8fafc;
+        }
+
+        .door-blade {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background-color: #4b5563;
+        }
+
+        .door-blade:nth-child(2) { transform: rotate(90deg); }
+
+        .rotating {
+            animation: rotate 4s linear infinite;
+        }
+
+        .stuck {
+            animation-play-state: paused;
+            border-color: #ef4444;
+            background-color: #fee2e2;
+        }
+
+        .person-icon {
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            z-index: 50;
+            transition: transform 0.1s ease-out;
+        }
+
+        .person-icon:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+        }
+
+        .log-container {
+            height: 180px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+        }
+
+        #stage {
+            background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
+            background-size: 30px 30px;
+        }
+
+        .collision-area {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 2px dashed rgba(239, 68, 68, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col font-sans">
+
+    <!-- ヘッダー -->
+    <header class="bg-indigo-900 text-white p-4 shadow-xl">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-black flex items-center gap-3 tracking-tight">
+                <span class="text-2xl">🚪</span> REVOLVING DOOR TRIGGER
+            </h1>
+            <div id="status-badge" class="px-3 py-1 bg-green-500 rounded-full text-xs font-bold uppercase">Ready</div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col lg:flex-row p-6 gap-6 container mx-auto">
+        
+        <!-- 左側：設定とログ -->
+        <div class="w-full lg:w-96 flex flex-col gap-6">
+            <!-- 設定カード -->
+            <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
+                <h2 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    リクエスト設定
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-slate-500 uppercase font-extrabold tracking-wider">Target URL</label>
+                        <input id="url-input" type="text" value="https://httpbin.org/get" class="w-full p-3 border border-slate-200 rounded-lg mt-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 uppercase font-extrabold tracking-wider">Method</label>
+                        <select id="method-select" class="w-full p-3 border border-slate-200 rounded-lg mt-1 text-sm bg-slate-50 cursor-pointer">
+                            <option value="GET">GET (受信テスト用)</option>
+                            <option value="POST">POST (データ送信用)</option>
+                        </select>
+                    </div>
+                    <button id="reset-btn" class="w-full bg-slate-800 hover:bg-black text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md active:scale-95">
+                        システムを復旧する
+                    </button>
+                </div>
+            </div>
+
+            <!-- ログカード -->
+            <div class="bg-slate-900 text-slate-300 p-6 rounded-2xl shadow-xl flex-1 flex flex-col border border-slate-800">
+                <h2 class="text-xs font-black mb-3 uppercase text-indigo-400 tracking-widest flex justify-between">
+                    <span>Terminal Log</span>
+                    <span id="log-count" class="text-slate-600">0 events</span>
+                </h2>
+                <div id="log" class="log-container space-y-2">
+                    <div class="text-slate-500 italic">> システム初期化完了。</div>
+                    <div class="text-slate-500 italic">> センサー反応待機中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：メインステージ -->
+        <div id="stage" class="flex-1 bg-white rounded-3xl shadow-2xl border border-slate-200 relative overflow-hidden flex items-center justify-center min-h-[500px]">
+            
+            <div class="absolute top-6 right-6 text-slate-400 text-xs font-bold uppercase tracking-widest pointer-events-none">
+                Revolving Area [Secure]
+            </div>
+
+            <!-- 回転扉 -->
+            <div id="revolving-door" class="revolving-door rotating shadow-inner">
+                <div class="door-blade"></div>
+                <div class="door-blade"></div>
+                <!-- 判定補助用の中央エリア -->
+                <div class="collision-area"></div>
+            </div>
+
+            <!-- 人のアイコン (Draggable) -->
+            <div id="person" class="person-icon absolute p-3 bg-white rounded-2xl shadow-2xl border border-slate-200 group" style="top: 80px; left: 80px;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" class="text-slate-700 group-active:text-indigo-600 transition-colors">
+                    <!-- 頭部 -->
+                    <circle cx="12" cy="4" r="3" />
+                    <!-- 胴体 -->
+                    <path d="M12 7c-2.76 0-5 2.24-5 5v4h2v5h2v-5h2v5h2v-5h2v-4c0-2.76-2.24-5-5-5z" />
+                </svg>
+                <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">USER</div>
+            </div>
+
+            <!-- メッセージ表示 -->
+            <div id="status-msg" class="absolute bottom-12 px-8 py-3 bg-red-600 text-white font-black rounded-xl shadow-2xl transform translate-y-32 transition-all duration-500 opacity-0 scale-90">
+                ⚠️ 挟まり事故発生！コマンドを実行しました
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const person = document.getElementById('person');
+        const stage = document.getElementById('stage');
+        const door = document.getElementById('revolving-door');
+        const log = document.getElementById('log');
+        const logCountDisplay = document.getElementById('log-count');
+        const urlInput = document.getElementById('url-input');
+        const methodSelect = document.getElementById('method-select');
+        const resetBtn = document.getElementById('reset-btn');
+        const statusMsg = document.getElementById('status-msg');
+        const statusBadge = document.getElementById('status-badge');
+
+        let isDragging = false;
+        let isStuck = false;
+        let offset = { x: 0, y: 0 };
+        let logCount = 0;
+
+        // ログ出力
+        function addLog(message, type = 'info') {
+            logCount++;
+            logCountDisplay.textContent = `${logCount} events`;
+            
+            const entry = document.createElement('div');
+            const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+            
+            let colorClass = 'text-indigo-300';
+            if (type === 'error') colorClass = 'text-red-400';
+            if (type === 'success') colorClass = 'text-green-400';
+            
+            entry.className = `border-l-2 border-slate-700 pl-2 leading-relaxed`;
+            entry.innerHTML = `<span class="text-slate-600 text-[10px]">[${time}]</span> <span class="${colorClass}">${message}</span>`;
+            
+            log.prepend(entry);
+        }
+
+        // ドラッグ操作
+        person.addEventListener('mousedown', startDrag);
+        person.addEventListener('touchstart', startDrag, { passive: false });
+
+        function startDrag(e) {
+            if (isStuck) return;
+            isDragging = true;
+            const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            
+            const rect = person.getBoundingClientRect();
+            offset.x = clientX - rect.left;
+            offset.y = clientY - rect.top;
+            
+            if (e.type === 'touchstart') e.preventDefault();
+        }
+
+        window.addEventListener('mousemove', handleDrag);
+        window.addEventListener('touchmove', handleDrag, { passive: false });
+
+        function handleDrag(e) {
+            if (!isDragging || isStuck) return;
+
+            const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+            const stageRect = stage.getBoundingClientRect();
+            
+            let x = clientX - stageRect.left - offset.x;
+            let y = clientY - stageRect.top - offset.y;
+
+            // ステージ内制限
+            x = Math.max(0, Math.min(x, stageRect.width - person.offsetWidth));
+            y = Math.max(0, Math.min(y, stageRect.height - person.offsetHeight));
+
+            person.style.left = `${x}px`;
+            person.style.top = `${y}px`;
+
+            checkCollision();
+        }
+
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('touchend', () => isDragging = false);
+
+        // 当たり判定
+        function checkCollision() {
+            if (isStuck) return;
+
+            const pRect = person.getBoundingClientRect();
+            const dRect = door.getBoundingClientRect();
+
+            const pCenterX = pRect.left + pRect.width / 2;
+            const pCenterY = pRect.top + pRect.height / 2;
+            const dCenterX = dRect.left + dRect.width / 2;
+            const dCenterY = dRect.top + dRect.height / 2;
+
+            const distance = Math.sqrt(Math.pow(pCenterX - dCenterX, 2) + Math.pow(pCenterY - dCenterY, 2));
+
+            // 当たり判定距離の調整
+            if (distance < 70) {
+                triggerStuck();
+            }
+        }
+
+        // 挟まり発生
+        function triggerStuck() {
+            isStuck = true;
+            isDragging = false;
+            
+            door.classList.add('stuck');
+            statusMsg.style.transform = 'translateY(0) scale(1)';
+            statusMsg.style.opacity = '1';
+            
+            statusBadge.textContent = 'Collision';
+            statusBadge.className = 'px-3 py-1 bg-red-600 rounded-full text-xs font-bold uppercase animate-pulse';
+            
+            addLog("!! 挟まり検知 !! 物理的なブロックを確認しました。");
+            sendHttpRequest();
+        }
+
+        // HTTP通信
+        async function sendHttpRequest() {
+            const url = urlInput.value;
+            const method = methodSelect.value;
+            
+            addLog(`Requesting: ${method} ${url}...`);
+
+            try {
+                const options = {
+                    method: method,
+                    mode: 'cors'
+                };
+                
+                if (method === 'POST') {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify({ 
+                        status: "STUCK", 
+                        location: "Main Gate",
+                        timestamp: new Date().toISOString() 
+                    });
+                }
+
+                const response = await fetch(url, options);
+                
+                if (response.ok) {
+                    addLog(`Success: Server responded with code ${response.status}`, 'success');
+                } else {
+                    throw new Error(`Server returned error ${response.status}`);
+                }
+            } catch (err) {
+                addLog(`Network Error: ${err.message}`, 'error');
+                addLog("CORS設定やURLが正しいか確認してください。", "error");
+            }
+        }
+
+        // リセット
+        resetBtn.addEventListener('click', () => {
+            isStuck = false;
+            door.classList.remove('stuck');
+            statusMsg.style.transform = 'translateY(32px) scale(0.9)';
+            statusMsg.style.opacity = '0';
+            
+            statusBadge.textContent = 'Ready';
+            statusBadge.className = 'px-3 py-1 bg-green-500 rounded-full text-xs font-bold uppercase';
+            
+            person.style.top = '80px';
+            person.style.left = '80px';
+            
+            addLog("安全装置をリセット。回転を再開します。");
+        });
+
+    </script>
+</body>
+</html>
